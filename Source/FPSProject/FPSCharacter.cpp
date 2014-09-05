@@ -1,5 +1,4 @@
 
-
 #include "FPSProject.h"
 #include "FPSCharacter.h"
 
@@ -7,9 +6,17 @@
 AFPSCharacter::AFPSCharacter(const class FPostConstructInitializeProperties& PCIP)
 	: Super(PCIP)
 {
-	FirstPersonCameraComponent = PCIP.CreateDefaultSubobject<UCameraComponent> (this, TEXT("FirstPersonCamera"));
+	FirstPersonCameraComponent = PCIP.CreateDefaultSubobject<UCameraComponent>(this, TEXT("FirstPersonCamera"));
 	FirstPersonCameraComponent->AttachParent = CapsuleComponent;
 	FirstPersonCameraComponent->RelativeLocation = FVector(0, 0, 50.0f + BaseEyeHeight);
+
+	FirstPersonMesh = PCIP.CreateDefaultSubobject<USkeletalMeshComponent>(this, TEXT("FirstPersonMesh"));
+	FirstPersonMesh->SetOnlyOwnerSee(true);
+	FirstPersonMesh->AttachParent = FirstPersonCameraComponent;
+	FirstPersonMesh->bCastDynamicShadow = false;
+	FirstPersonMesh->CastShadow = false;
+
+	Mesh->SetOwnerNoSee(true);
 }
 
 void AFPSCharacter::BeginPlay()
@@ -55,6 +62,7 @@ void AFPSCharacter::SetupPlayerInputComponent(UInputComponent* InInputComponent)
 	InInputComponent->BindAxis("LookUp", this, &AFPSCharacter::AddControllerPitchInput);
 	InInputComponent->BindAction("Jump", IE_Pressed, this, &AFPSCharacter::OnStartJump);
 	InInputComponent->BindAction("Jump", IE_Released, this, &AFPSCharacter::OnStopJump);
+	InInputComponent->BindAction("Fire", IE_Pressed, this, &AFPSCharacter::OnFire);
 }
 
 void AFPSCharacter::OnStartJump()
@@ -65,4 +73,34 @@ void AFPSCharacter::OnStartJump()
 void AFPSCharacter::OnStopJump()
 {
 	bPressedJump = false;
+}
+
+void AFPSCharacter::OnFire()
+{
+	if(ProjectileClass)
+	{
+		FVector CameraLoc;
+		FRotator CameraRot;
+		GetActorEyesViewPoint(CameraLoc, CameraRot);
+
+		FVector const MuzzleLocation = CameraLoc + FTransform(CameraRot).TransformVector(MuzzleOffset);
+		FRotator MuzzleRotation = CameraRot;
+		MuzzleRotation.Pitch += 10.0f;
+
+		UWorld* const World = GetWorld();
+		
+		if(World)
+		{
+			FActorSpawnParameters SpawnParams;
+			SpawnParams.Owner = this;
+			SpawnParams.Instigator = Instigator;
+
+			AFPSProjectile* const Projectile = World->SpawnActor<AFPSProjectile> (ProjectileClass, MuzzleLocation, MuzzleRotation, SpawnParams);
+			if(Projectile)
+			{
+				FVector const LaunchDir = MuzzleRotation.Vector();
+				Projectile->InitVelocity(LaunchDir);
+			}
+		}
+	}
 }
